@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths-ignore:
-      - "**/*.md"
   pull_request:
 
 concurrency:
@@ -24,53 +22,51 @@ jobs:
       CMAKE_BUILD_PARALLEL_LEVEL: 8
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Setup MSVC (VS 2022)
+      - name: MSVC (VS 2022, x64)
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      - name: Override VCPKG_ROOT to workspace path
+      # Wyciągamy 40-znakowy SHA z builtin-baseline (jeśli brak/niepełny -> bezpieczny fallback)
+      - name: Resolve vcpkg commit (from builtin-baseline or fallback)
+        id: vcpkg-commit
         shell: pwsh
         run: |
-          $root = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
-          echo "VCPKG_ROOT=$root" >> $env:GITHUB_ENV
-          Write-Host "Using VCPKG_ROOT = $root"
-
-      - name: Setup vcpkg (full clone + bootstrap)
-        shell: pwsh
-        run: |
-          if (Test-Path "$env:VCPKG_ROOT") {
-            Write-Host "Cleaning existing VCPKG_ROOT at $env:VCPKG_ROOT"
-            Remove-Item -Recurse -Force "$env:VCPKG_ROOT"
+          $fallback = '5b1214315250939257ef5d62ecdcbca18cf4fb1c' # zalecany, zgodny z run-vcpkg@v11
+          $commit = ''
+          if (Test-Path "$env:GITHUB_WORKSPACE\vcpkg.json") {
+            try {
+              $json = Get-Content "$env:GITHUB_WORKSPACE\vcpkg.json" -Raw | ConvertFrom-Json
+              $commit = $json.'builtin-baseline'
+            } catch { $commit = '' }
           }
-          git clone https://github.com/microsoft/vcpkg "$env:VCPKG_ROOT"
-          git -C "$env:VCPKG_ROOT" fetch --force --tags --prune origin
-          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
-          & "$env:VCPKG_ROOT\vcpkg.exe" version
+          if ($commit -match '^[0-9a-f]{40}$') {
+            "vcpkgGitCommitId=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Host "Using builtin-baseline as vcpkgGitCommitId: $commit"
+          } else {
+            "vcpkgGitCommitId=$fallback" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Host "No valid builtin-baseline found; using fallback: $fallback"
+          }
 
-      - name: Cache vcpkg artifacts
-        uses: actions/cache@v4
+      - name: Setup vcpkg (manifest install + GH cache)
+        uses: lukka/run-vcpkg@v11
         with:
-          path: |
-            ${{ env.VCPKG_ROOT }}\installed
-            ${{ env.VCPKG_ROOT }}\downloads
-          key: vcpkg-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ hashFiles('**/vcpkg.json','**/vcpkg-configuration.json','**/vcpkg-lock.json') }}
-          restore-keys: |
-            vcpkg-${{ env.VCPKG_DEFAULT_TRIPLET }}-
+          vcpkgGitURL: https://github.com/microsoft/vcpkg.git
+          vcpkgGitCommitId: ${{ steps.vcpkg-commit.outputs.vcpkgGitCommitId }}
+          # NIE ustawiamy vcpkgDirectory — nie wymagamy submodułu, unikamy 'pathspec .../vcpkg'
+          runVcpkgInstall: true
+          vcpkgJsonGlob: "**/vcpkg.json"
+          vcpkgConfigurationJsonGlob: "**/vcpkg-configuration.json"
+          doNotCache: false
 
-      - name: vcpkg install (manifest mode)
-        shell: pwsh
-        run: |
-          # Installs all dependencies from vcpkg.json, including host tools.
-          & "$env:VCPKG_ROOT\vcpkg.exe" install
-
-      - name: Ensure/locate pkgconf (handles host/target + classic fallback)
+      # Fallback dla pkgconf (często potrzebny przez find_package via pkg-config)
+      - name: Ensure pkgconf (host/target)
         shell: pwsh
         run: |
           function Find-Pkgconf {
@@ -82,37 +78,32 @@ jobs:
             foreach ($p in $candidates) { if (Test-Path $p) { return $p } }
             return $null
           }
-
-          $hostTrip = "${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}"
-          $targetTrip = "${{ env.VCPKG_DEFAULT_TRIPLET }}"
-
-          $exe = Find-Pkgconf -HostTriplet $hostTrip -TargetTriplet $targetTrip
+          $host = "${env:VCPKG_DEFAULT_HOST_TRIPLET}"
+          $tgt  = "${env:VCPKG_DEFAULT_TRIPLET}"
+          $exe = Find-Pkgconf -HostTriplet $host -TargetTriplet $tgt
           if (-not $exe) {
-            Write-Host "pkgconf not found after manifest install. Installing classic for host triplet $hostTrip..."
-            & "$env:VCPKG_ROOT\vcpkg.exe" install pkgconf --triplet $hostTrip --classic
-            $exe = Find-Pkgconf -HostTriplet $hostTrip -TargetTriplet $targetTrip
+            Push-Location "$env:VCPKG_ROOT"
+            try { .\vcpkg.exe install pkgconf --triplet $host --classic } catch { Write-Host "pkgconf classic install skipped." }
+            Pop-Location
+            $exe = Find-Pkgconf -HostTriplet $host -TargetTriplet $tgt
           }
+          if (-not $exe) { throw "pkgconf.exe not found in installed\$host or installed\$tgt" }
+          $dir = Split-Path $exe
+          echo "$dir" >> $env:GITHUB_PATH
+          echo "PKG_CONFIG_EXECUTABLE=$exe" >> $env:GITHUB_ENV
+          Write-Host "Using pkgconf at $exe"
 
-          if (-not $exe) {
-            Write-Error "pkgconf.exe not found in installed\$hostTrip or installed\$targetTrip"
-          } else {
-            $dir = Split-Path $exe
-            echo "$dir" >> $env:GITHUB_PATH
-            echo "PKG_CONFIG_EXECUTABLE=$exe" >> $env:GITHUB_ENV
-            Write-Host "Using pkgconf at $exe"
-          }
-
-      - name: Configure (CMake - VS generator)
+      - name: Configure (CMake, VS2022 x64)
         shell: pwsh
-        run: |
-          cmake -S . -B build `
-            -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_DEFAULT_TRIPLET }} `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_VERBOSE_MAKEFILE=ON `
-            -DOTC_ENABLE_TTF=ON -DOTC_ENABLE_HARFBUZZ=ON -DOTC_ENABLE_FRIBIDI=ON `
-            -DPKG_CONFIG_EXECUTABLE="$env:PKG_CONFIG_EXECUTABLE"
+        run: >
+          cmake -S . -B build
+          -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET="$env:VCPKG_DEFAULT_TRIPLET"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_VERBOSE_MAKEFILE=ON
+          -DOTC_ENABLE_TTF=ON -DOTC_ENABLE_HARFBUZZ=ON -DOTC_ENABLE_FRIBIDI=ON
+          -DPKG_CONFIG_EXECUTABLE="$env:PKG_CONFIG_EXECUTABLE"
 
       - name: Build (Release)
         shell: pwsh
@@ -126,7 +117,8 @@ jobs:
           path: |
             build/**/Release/*.exe
             build/**/client.exe
-            build/bin/**
+            build/**/*.dll
+            build/*.pdb
           if-no-files-found: warn
 
       - name: Upload CMake logs (on failure)
