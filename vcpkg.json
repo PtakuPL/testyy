@@ -12,8 +12,8 @@
     "libogg",
     "libvorbis",
     "nlohmann-json",
-    "freetype",
     "harfbuzz",
+    "freetype",
     "fribidi",
     "openal-soft",
     "openssl",
@@ -24,12 +24,11 @@
     "stduuid",
     "zlib",
     "bshoshany-thread-pool",
-
-    { "name": "opengl",  "platform": "windows" },
-    { "name": "glew",    "platform": "windows | linux | osx" },
-    { "name": "angle",   "platform": "windows" },
-    { "name": "pkgconf", "host": true, "platform": "windows" },
-    { "name": "luajit",  "platform": "windows | linux" }
+    { "name": "glew",   "platform": "windows | linux | osx" },
+    { "name": "opengl", "platform": "windows" },
+    { "name": "angle",  "platform": "windows" },
+    { "name": "luajit" },
+    { "name": "pkgconf", "host": true, "platform": "windows" }
   ],
-  "builtin-baseline": "b322346fe03b0d04283f9daf05fecc0c8f64d6f"
+  "builtin-baseline": "fa38f70294672e88692567ff92dbb17e45d1a334"
 }
