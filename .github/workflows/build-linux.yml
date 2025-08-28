@@ -1,0 +1,77 @@
+name: Build - Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    env:
+      VCPKG_FEATURE_FLAGS: manifests,binarycaching
+      VCPKG_BINARY_SOURCES: clear;x-gha,readwrite;files,${{ runner.temp }}/vcpkg-archives,readwrite
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ninja-build ccache autoconf libtool pkg-config \
+            libglew-dev libx11-dev libgl1-mesa-dev curl zip unzip tar
+          cmake --version
+          ninja --version
+          g++ --version
+
+      - name: Cache vcpkg binaries (restore+save)
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: ${{ runner.os }}-vcpkg-
+          save-always: true
+
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg "$GITHUB_WORKSPACE/vcpkg"
+          "$GITHUB_WORKSPACE/vcpkg/bootstrap-vcpkg.sh"
+          echo "VCPKG_ROOT=$GITHUB_WORKSPACE/vcpkg" >> $GITHUB_ENV
+
+      - name: Configure
+        run: |
+          cmake -S . -B build/linux-release -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: |
+          cmake --build build/linux-release --parallel --target otclient || \
+          cmake --build build/linux-release --parallel
+
+      - name: Find binary
+        id: bin
+        run: |
+          set -e
+          BIN="$(find build/linux-release -type f -name 'otclient*' -executable | head -n 1 || true)"
+          echo "Found: $BIN"
+          echo "bin=$BIN" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact (binary)
+        if: ${{ steps.bin.outputs.bin != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: otclient-linux
+          path: ${{ steps.bin.outputs.bin }}
+          if-no-files-found: error
+
+      - name: Upload build tree (fallback)
+        if: ${{ steps.bin.outputs.bin == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-release-fallback
+          path: build/linux-release
+          if-no-files-found: warn

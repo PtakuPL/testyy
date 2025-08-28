@@ -1,0 +1,7 @@
+*
+!.gitignore
+!README.md
+
+# keep client 1412 files
+!1412/
+!1412/**

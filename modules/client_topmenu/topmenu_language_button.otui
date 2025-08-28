@@ -1,0 +1,9 @@
+
+# Paste into modules/client_topmenu/topmenu.otui near other top bar buttons
+Button < GameTopButton
+  id: langTopButton
+  icon-source: /images/topbuttons/language
+  tooltip: tr('Change language')
+  anchors.left: prev.right
+  margin-left: 4
+  onClick: modules.client_locales.openLanguagePicker()

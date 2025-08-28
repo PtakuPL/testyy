@@ -1,0 +1,7 @@
+Font
+  name: sans-bold-16px
+  texture: sans-bold-16px_cp1250
+  charset: cp1250
+  height: 20
+  glyph-size: 24 24
+  space-width: 3

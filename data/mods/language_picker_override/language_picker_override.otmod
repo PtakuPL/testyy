@@ -1,0 +1,11 @@
+Module
+  name: "Language Picker Override"
+  description: "Adds top-menu Language button and shows the language picker once (then remembers)."
+  author: "ptaku"
+  website: ""
+  sandboxed: true
+  enabled: true
+  loadPriority: 9999
+
+  scripts:
+    - init.lua
