@@ -1,0 +1,16 @@
+# Build / tooling
+/build/
+/.vs/
+/. vsc od e/
+/CMakeFiles/
+/CMakeCache.txt
+*.sln
+*.vcxproj*
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.log
+*.zip
+*.7z
+*.rar
