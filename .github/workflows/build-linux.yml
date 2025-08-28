@@ -1,77 +1,112 @@
-name: Build - Linux
+name: build-windows
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
+    paths-ignore:
+      - "**/*.md"
+  pull_request:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  linux:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: windows-latest
+
     env:
+      # Use a stable local path instead of runner.temp to avoid context issues
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_FEATURE_FLAGS: manifests,binarycaching
-      VCPKG_BINARY_SOURCES: clear;x-gha,readwrite;files,${{ runner.temp }}/vcpkg-archives,readwrite
+      VCPKG_BINARY_SOURCES: clear;x-gha,readwrite
+      CMAKE_BUILD_PARALLEL_LEVEL: 8
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
-      - name: Install dependencies
+      - name: Show tool versions
+        shell: pwsh
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential ninja-build ccache autoconf libtool pkg-config \
-            libglew-dev libx11-dev libgl1-mesa-dev curl zip unzip tar
           cmake --version
-          ninja --version
-          g++ --version
+          ninja --version 2>$null || echo "Ninja not yet installed"
 
-      - name: Cache vcpkg binaries (restore+save)
-        uses: actions/cache@v4
+      - name: Setup MSVC (VS 2022)
+        uses: ilammy/msvc-dev-cmd@v1
         with:
-          path: ${{ runner.temp }}/vcpkg-archives
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
-          restore-keys: ${{ runner.os }}-vcpkg-
-          save-always: true
+          arch: x64
+
+      - name: Ensure Ninja present
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+            choco install ninja --no-progress -y
+          }
+          ninja --version
 
       - name: Setup vcpkg
+        shell: pwsh
         run: |
-          git clone https://github.com/microsoft/vcpkg "$GITHUB_WORKSPACE/vcpkg"
-          "$GITHUB_WORKSPACE/vcpkg/bootstrap-vcpkg.sh"
-          echo "VCPKG_ROOT=$GITHUB_WORKSPACE/vcpkg" >> $GITHUB_ENV
+          if (-not (Test-Path "$env:VCPKG_ROOT")) {
+            git clone --depth 1 https://github.com/microsoft/vcpkg "$env:VCPKG_ROOT"
+          }
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
 
-      - name: Configure
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.VCPKG_ROOT }}\installed
+            ${{ env.VCPKG_ROOT }}\downloads
+          key: vcpkg-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ hashFiles('**/vcpkg.json','**/vcpkg-configuration.json','**/vcpkg-lock.json') }}
+          restore-keys: |
+            vcpkg-${{ env.VCPKG_DEFAULT_TRIPLET }}-
+
+      - name: vcpkg install (manifest mode)
+        shell: pwsh
         run: |
-          cmake -S . -B build/linux-release -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet $env:VCPKG_DEFAULT_TRIPLET
+          & "$env:VCPKG_ROOT\vcpkg.exe" list
+
+      - name: Configure (CMake + Ninja)
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -G "Ninja" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DOTC_ENABLE_TTF=ON -DOTC_ENABLE_HARFBUZZ=ON -DOTC_ENABLE_FRIBIDI=ON `
+            -DCMAKE_VERBOSE_MAKEFILE=ON
 
       - name: Build
-        run: |
-          cmake --build build/linux-release --parallel --target otclient || \
-          cmake --build build/linux-release --parallel
+        shell: pwsh
+        run: cmake --build build --parallel
 
-      - name: Find binary
-        id: bin
-        run: |
-          set -e
-          BIN="$(find build/linux-release -type f -name 'otclient*' -executable | head -n 1 || true)"
-          echo "Found: $BIN"
-          echo "bin=$BIN" >> "$GITHUB_OUTPUT"
-
-      - name: Upload artifact (binary)
-        if: ${{ steps.bin.outputs.bin != '' }}
+      - name: Upload artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: otclient-linux
-          path: ${{ steps.bin.outputs.bin }}
-          if-no-files-found: error
+          name: otclient-windows-x64
+          path: |
+            build/**/otclient*.exe
+            build/**/client.exe
+            build/bin/**
+            build/**/Release/**
+          if-no-files-found: warn
 
-      - name: Upload build tree (fallback)
-        if: ${{ steps.bin.outputs.bin == '' }}
+      - name: Upload CMake logs (on failure)
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-linux-release-fallback
-          path: build/linux-release
+          name: cmake-logs-windows
+          path: |
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
           if-no-files-found: warn
