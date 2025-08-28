@@ -83,18 +83,18 @@ jobs:
             return $null
           }
 
-          $host = "${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}"
-          $tgt  = "${{ env.VCPKG_DEFAULT_TRIPLET }}"
+          $hostTrip = "${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}"
+          $targetTrip = "${{ env.VCPKG_DEFAULT_TRIPLET }}"
 
-          $exe = Find-Pkgconf -HostTriplet $host -TargetTriplet $tgt
+          $exe = Find-Pkgconf -HostTriplet $hostTrip -TargetTriplet $targetTrip
           if (-not $exe) {
-            Write-Host "pkgconf not found after manifest install. Installing classic for host triplet $host..."
-            & "$env:VCPKG_ROOT\vcpkg.exe" install pkgconf --triplet $host --classic
-            $exe = Find-Pkgconf -HostTriplet $host -TargetTriplet $tgt
+            Write-Host "pkgconf not found after manifest install. Installing classic for host triplet $hostTrip..."
+            & "$env:VCPKG_ROOT\vcpkg.exe" install pkgconf --triplet $hostTrip --classic
+            $exe = Find-Pkgconf -HostTriplet $hostTrip -TargetTriplet $targetTrip
           }
 
           if (-not $exe) {
-            Write-Error "pkgconf.exe not found in installed\$host or installed\$tgt"
+            Write-Error "pkgconf.exe not found in installed\$hostTrip or installed\$targetTrip"
           } else {
             $dir = Split-Path $exe
             echo "$dir" >> $env:GITHUB_PATH
