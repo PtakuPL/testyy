@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+  pull_request:
 
 jobs:
   build:
@@ -20,87 +21,63 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 0
+          submodules: false   # nie oczekujemy submodułu vcpkg/
 
-      - name: Setup MSVC (VS 2022, x64)
+      - name: MSVC (VS 2022, x64)
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      - name: Setup vcpkg (use repo's vcpkg folder)
+      - name: Install CMake + Ninja
+        uses: lukka/get-cmake@latest
+
+      # Kluczowy krok: NIE podajemy vcpkgDirectory (nie masz submodułu).
+      # Pinujemy pełny 40-znakowy commit i wskazujemy JEDEN manifest.
+      - name: Setup vcpkg (pin + manifest)
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitURL: https://github.com/microsoft/vcpkg.git
-          # Use the vcpkg directory inside the repo if present
-          vcpkgDirectory: ${{ github.workspace }}/vcpkg
-          # IMPORTANT: real 40-hex SHA (avoid earlier 'baseline' mistake)
-          vcpkgGitCommitId: fa38f70294672e88692567ff92dbb17e45d1a334
-          # Let the action run 'vcpkg install' from the manifest
+          # Użyj spójnego, nowszego commita vcpkg (40 hex). Jeżeli w repo
+          # zmienisz builtin-baseline na inny, zaktualizuj tu to samo.
+          vcpkgGitCommitId: b322346fe03b0d04283f9daf05fecc0c8f64d6f
           runVcpkgInstall: true
-          vcpkgJsonGlob: "**/vcpkg.json"
-          vcpkgConfigurationJsonGlob: "**/vcpkg-configuration.json"
-          # Avoid bloating cache while debugging
+          # Bardzo ważne: wskaż dokładnie jeden manifest
+          vcpkgJsonGlob: 'vcpkg.json'
+          # Jeśli masz inne vcpkg.json w podkatalogach – ignorujemy je:
+          vcpkgJsonIgnores: "['**/vcpkg/**']"
+          # Zostawiam Twoje parametry uruchomienia:
+          runVcpkgFormatString: "[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`]"
+          # Zgodnie z logiem: bez cache samego vcpkg (binaria portów i tak cache’uje vcpkg)
           doNotCache: true
+          doNotUpdateVcpkg: false
+          useShell: true
+          # Zbieranie logów jak w Twoim runie:
+          logCollectionRegExps: '\s*"(.+CMakeOutput\.log)"\.\s*;\s*"(.+CMakeError\.log)"\.\s*;\s*(.+out\.log)\s*;\s+(.+err\.log)\s*;\s*(.+vcpkg.+\.log)\s*'
 
-      - name: Fallback install pkgconf (classic)
+      - name: Configure (CMake / VS2022 x64)
         shell: pwsh
-        run: |
-          # In manifest mode `vcpkg install pkgconf` errors. Run from VCPKG_ROOT with --classic.
-          Push-Location "$env:VCPKG_ROOT"
-          try {
-            .\vcpkg.exe install pkgconf --triplet $env:VCPKG_DEFAULT_HOST_TRIPLET --classic
-          } catch {
-            Write-Host "Ignoring pkgconf classic failure (may already be installed)."
-          }
-          Pop-Location
-
-      - name: Ensure/locate pkgconf (handles host/target + classic fallback)
-        shell: pwsh
-        run: |
-          function Find-Pkgconf([string]$HostTriplet,[string]$TargetTriplet){
-            $candidates = @(
-              (Join-Path $env:VCPKG_ROOT "installed\$HostTriplet\tools\pkgconf\pkgconf.exe"),
-              (Join-Path $env:VCPKG_ROOT "installed\$TargetTriplet\tools\pkgconf\pkgconf.exe")
-            )
-            foreach($p in $candidates){ if(Test-Path $p){ return $p } }
-            return $null
-          }
-          $hostTriplet = "${env:VCPKG_DEFAULT_HOST_TRIPLET}"
-          if([string]::IsNullOrEmpty($hostTriplet)){ $hostTriplet = "x64-windows" }
-          $targetTriplet = "${env:VCPKG_DEFAULT_TRIPLET}"
-          if([string]::IsNullOrEmpty($targetTriplet)){ $targetTriplet = "x64-windows-static" }
-
-          $exe = Find-Pkgconf -HostTriplet $hostTriplet -TargetTriplet $targetTriplet
-          if(-not $exe){
-            Write-Error "pkgconf.exe not found in installed\$hostTriplet or installed\$targetTriplet"
-          } else {
-            $dir = Split-Path $exe
-            echo "$dir" >> $env:GITHUB_PATH
-            echo "PKG_CONFIG_EXECUTABLE=$exe" >> $env:GITHUB_ENV
-            Write-Host "Using pkgconf at $exe"
-          }
-
-      - name: Configure (VS2022 x64)
-        shell: pwsh
-        run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET="$env:VCPKG_DEFAULT_TRIPLET" `
-            -DCMAKE_BUILD_TYPE=Release
+        run: >
+          cmake -S . -B build
+          -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET="$env:VCPKG_DEFAULT_TRIPLET"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_VERBOSE_MAKEFILE=ON
 
       - name: Build (Release)
         shell: pwsh
         run: cmake --build build --config Release --parallel
 
       - name: Upload artifacts
-        if: always()
         uses: actions/upload-artifact@v4
+        if: success()
         with:
-          name: otclient-windows
+          name: windows-release-${{ github.run_number }}
           path: |
-            build\bin\Release\*.exe
-            build\*.pdb
-            build\*.dll
+            build/**/Release/*.exe
+            build/**/*.dll
+            build/*.pdb
           if-no-files-found: warn
 
       - name: Upload CMake logs (on failure)
@@ -111,3 +88,4 @@ jobs:
           path: |
             build/CMakeFiles/CMakeOutput.log
             build/CMakeFiles/CMakeError.log
+          if-no-files-found: warn
