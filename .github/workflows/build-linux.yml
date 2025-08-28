@@ -70,30 +70,36 @@ jobs:
           # Installs all dependencies from vcpkg.json, including host tools.
           & "$env:VCPKG_ROOT\vcpkg.exe" install
 
-      - name: Fallback install pkgconf (classic)
+      - name: Ensure/locate pkgconf (handles host/target + classic fallback)
         shell: pwsh
         run: |
-          $hostTriplet = "${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}"
-          $pkgPath = Join-Path $env:VCPKG_ROOT "installed\$hostTriplet\tools\pkgconf\pkgconf.exe"
-          if (-not (Test-Path $pkgPath)) {
-            Write-Host "pkgconf not found, installing in classic mode for host triplet $hostTriplet..."
-            & "$env:VCPKG_ROOT\vcpkg.exe" install pkgconf --host-triplet $hostTriplet --classic
-          } else {
-            Write-Host "pkgconf already present at $pkgPath"
+          function Find-Pkgconf {
+            param([string]$HostTriplet, [string]$TargetTriplet)
+            $candidates = @(
+              (Join-Path $env:VCPKG_ROOT "installed\$HostTriplet\tools\pkgconf\pkgconf.exe"),
+              (Join-Path $env:VCPKG_ROOT "installed\$TargetTriplet\tools\pkgconf\pkgconf.exe")
+            )
+            foreach ($p in $candidates) { if (Test-Path $p) { return $p } }
+            return $null
           }
 
-      - name: Locate pkgconf from vcpkg
-        shell: pwsh
-        run: |
-          $hostTriplet = "${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}"
-          $pkgDir = Join-Path $env:VCPKG_ROOT "installed\$hostTriplet\tools\pkgconf"
-          $exe = Join-Path $pkgDir "pkgconf.exe"
-          if (Test-Path $exe) {
-            echo "$pkgDir" >> $env:GITHUB_PATH
-            echo "PKG_CONFIG_EXECUTABLE=$exe" >> $env:GITHUB_ENV
-            Write-Host "Found pkgconf at $exe"
+          $host = "${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}"
+          $tgt  = "${{ env.VCPKG_DEFAULT_TRIPLET }}"
+
+          $exe = Find-Pkgconf -HostTriplet $host -TargetTriplet $tgt
+          if (-not $exe) {
+            Write-Host "pkgconf not found after manifest install. Installing classic for host triplet $host..."
+            & "$env:VCPKG_ROOT\vcpkg.exe" install pkgconf --triplet $host --classic
+            $exe = Find-Pkgconf -HostTriplet $host -TargetTriplet $tgt
+          }
+
+          if (-not $exe) {
+            Write-Error "pkgconf.exe not found in installed\$host or installed\$tgt"
           } else {
-            Write-Error "pkgconf.exe not found at $pkgDir"
+            $dir = Split-Path $exe
+            echo "$dir" >> $env:GITHUB_PATH
+            echo "PKG_CONFIG_EXECUTABLE=$exe" >> $env:GITHUB_ENV
+            Write-Host "Using pkgconf at $exe"
           }
 
       - name: Configure (CMake - VS generator)
