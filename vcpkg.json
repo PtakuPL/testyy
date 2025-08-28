@@ -1,9 +1,10 @@
 {
   "name": "otclient",
   "version-string": "1.0.0",
-   "dependencies": [
+  "dependencies": [
     "asio",
     "abseil",
+    "fmt",
     "cpp-httplib",
     "discord-rpc",
     "liblzma",
