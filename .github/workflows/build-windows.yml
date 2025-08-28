@@ -1,0 +1,96 @@
+name: Build - Windows (TTF/RTL)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "src/**"
+      - "data/**"
+      - ".github/workflows/build-windows.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "data/**"
+      - ".github/workflows/build-windows.yml"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_TRIPLET: x64-windows
+      # Force classic mode (disable manifests) to allow explicit package list on CI
+      VCPKG_FEATURE_FLAGS: -manifests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Install vcpkg
+        shell: cmd
+        run: |
+          git clone https://github.com/microsoft/vcpkg "%VCPKG_ROOT%"
+          call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Cache vcpkg installed
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_ROOT }}\installed
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-
+
+      - name: Install libraries (freetype/harfbuzz/fribidi)
+        shell: cmd
+        run: |
+          "%VCPKG_ROOT%\vcpkg.exe" install freetype harfbuzz fribidi --triplet %VCPKG_DEFAULT_TRIPLET% --clean-after-build
+
+      - name: Configure (CMake / VS 2022)
+        shell: cmd
+        run: |
+          cmake -S . -B build ^
+            -G "Visual Studio 17 2022" -A x64 ^
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
+            -DVCPKG_TARGET_TRIPLET=%VCPKG_DEFAULT_TRIPLET% ^
+            -DOPTIONS_ENABLE_IPO=ON
+
+      - name: Build (Release)
+        shell: cmd
+        run: cmake --build build --config Release --parallel
+
+      - name: Package Executable + DLLs + data
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifactRoot = Join-Path $env:GITHUB_WORKSPACE "artifacts\Release"
+          New-Item -Force -ItemType Directory -Path $artifactRoot | Out-Null
+
+          # Find otclient.exe (common VS multi-config layout)
+          $exe = Get-ChildItem -Recurse -Path "build" -Filter "otclient*.exe" | Where-Object {
+            $_.FullName -match "\\Release\\.*otclient.*\.exe$"
+          } | Select-Object -First 1
+          if (-not $exe) { $exe = Get-ChildItem -Recurse -Path "build" -Filter "otclient*.exe" | Select-Object -First 1 }
+          if (-not $exe) { throw "otclient.exe not found in build output." }
+
+          # Copy EXE and neighbor DLLs
+          Copy-Item $exe.FullName $artifactRoot
+          Get-ChildItem -Path $exe.Directory.FullName -Filter "*.dll" | Copy-Item -Destination $artifactRoot
+
+          # Copy data folder (UI, fonts, etc.)
+          Copy-Item -Recurse -Force "data" (Join-Path $artifactRoot "data")
+
+          # Zip artifact
+          $zip = Join-Path $env:GITHUB_WORKSPACE "otclient-windows-Release.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "$artifactRoot\*" -DestinationPath $zip
+          Write-Host "Created: $zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: otclient-windows-Release
+          path: otclient-windows-Release.zip
+          if-no-files-found: error
