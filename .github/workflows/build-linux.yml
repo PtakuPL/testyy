@@ -18,6 +18,7 @@ jobs:
 
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_DEFAULT_HOST_TRIPLET: x64-windows
       VCPKG_FEATURE_FLAGS: manifests,binarycaching
       VCPKG_BINARY_SOURCES: clear;x-gha,readwrite
       CMAKE_BUILD_PARALLEL_LEVEL: 8
@@ -66,19 +67,33 @@ jobs:
       - name: vcpkg install (manifest mode)
         shell: pwsh
         run: |
-          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet $env:VCPKG_DEFAULT_TRIPLET
-          & "$env:VCPKG_ROOT\vcpkg.exe" list
+          # Installs all dependencies from vcpkg.json, including host tools.
+          & "$env:VCPKG_ROOT\vcpkg.exe" install
 
-      - name: Ensure pkgconf (for CMake FindPkgConfig)
+      - name: Fallback install pkgconf (classic)
         shell: pwsh
         run: |
-          & "$env:VCPKG_ROOT\vcpkg.exe" install pkgconf --triplet $env:VCPKG_DEFAULT_TRIPLET
-          $pkgPath = Join-Path $env:VCPKG_ROOT "installed\$env:VCPKG_DEFAULT_TRIPLET\tools\pkgconf"
-          if (Test-Path "$pkgPath\pkgconf.exe") {
-            echo "$pkgPath" >> $env:GITHUB_PATH
-            echo "PKG_CONFIG_EXECUTABLE=$pkgPath\pkgconf.exe" >> $env:GITHUB_ENV
+          $hostTriplet = "${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}"
+          $pkgPath = Join-Path $env:VCPKG_ROOT "installed\$hostTriplet\tools\pkgconf\pkgconf.exe"
+          if (-not (Test-Path $pkgPath)) {
+            Write-Host "pkgconf not found, installing in classic mode for host triplet $hostTriplet..."
+            & "$env:VCPKG_ROOT\vcpkg.exe" install pkgconf --host-triplet $hostTriplet --classic
           } else {
-            Write-Error "pkgconf.exe not found at $pkgPath"
+            Write-Host "pkgconf already present at $pkgPath"
+          }
+
+      - name: Locate pkgconf from vcpkg
+        shell: pwsh
+        run: |
+          $hostTriplet = "${{ env.VCPKG_DEFAULT_HOST_TRIPLET }}"
+          $pkgDir = Join-Path $env:VCPKG_ROOT "installed\$hostTriplet\tools\pkgconf"
+          $exe = Join-Path $pkgDir "pkgconf.exe"
+          if (Test-Path $exe) {
+            echo "$pkgDir" >> $env:GITHUB_PATH
+            echo "PKG_CONFIG_EXECUTABLE=$exe" >> $env:GITHUB_ENV
+            Write-Host "Found pkgconf at $exe"
+          } else {
+            Write-Error "pkgconf.exe not found at $pkgDir"
           }
 
       - name: Configure (CMake - VS generator)
