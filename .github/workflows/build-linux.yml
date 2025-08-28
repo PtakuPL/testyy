@@ -69,6 +69,18 @@ jobs:
           & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet $env:VCPKG_DEFAULT_TRIPLET
           & "$env:VCPKG_ROOT\vcpkg.exe" list
 
+      - name: Ensure pkgconf (for CMake FindPkgConfig)
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_ROOT\vcpkg.exe" install pkgconf --triplet $env:VCPKG_DEFAULT_TRIPLET
+          $pkgPath = Join-Path $env:VCPKG_ROOT "installed\$env:VCPKG_DEFAULT_TRIPLET\tools\pkgconf"
+          if (Test-Path "$pkgPath\pkgconf.exe") {
+            echo "$pkgPath" >> $env:GITHUB_PATH
+            echo "PKG_CONFIG_EXECUTABLE=$pkgPath\pkgconf.exe" >> $env:GITHUB_ENV
+          } else {
+            Write-Error "pkgconf.exe not found at $pkgPath"
+          }
+
       - name: Configure (CMake - VS generator)
         shell: pwsh
         run: |
@@ -77,8 +89,9 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_DEFAULT_TRIPLET }} `
             -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_VERBOSE_MAKEFILE=ON `
             -DOTC_ENABLE_TTF=ON -DOTC_ENABLE_HARFBUZZ=ON -DOTC_ENABLE_FRIBIDI=ON `
-            -DCMAKE_VERBOSE_MAKEFILE=ON
+            -DPKG_CONFIG_EXECUTABLE="$env:PKG_CONFIG_EXECUTABLE"
 
       - name: Build (Release)
         shell: pwsh
