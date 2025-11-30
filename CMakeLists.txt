@@ -109,22 +109,36 @@ option(OTC_ENABLE_FRIBIDI  "Enable FriBidi bidi support" ON)
 # Create an interface target that will carry the include/libs/defines
 add_library(otc_textstack INTERFACE)
 
-# Freetype (via vcpkg CONFIG)
+# Freetype (via vcpkg CONFIG or system)
 if(OTC_ENABLE_TTF)
-  find_package(Freetype CONFIG REQUIRED)
+  # Prefer modern CONFIG package (e.g. vcpkg). If not found, fall back to module mode.
+  find_package(Freetype CONFIG QUIET)
+  if(NOT TARGET Freetype::Freetype)
+    find_package(Freetype REQUIRED)
+  endif()
+
   target_link_libraries(otc_textstack INTERFACE Freetype::Freetype)
   target_compile_definitions(otc_textstack INTERFACE OTC_ENABLE_TTF)
 endif()
 
-# HarfBuzz (via vcpkg CONFIG)
+# HarfBuzz (via vcpkg CONFIG, with pkg-config fallback)
 if(OTC_ENABLE_HARFBUZZ)
-  find_package(harfbuzz CONFIG REQUIRED)
-  # Prefer the imported target from vcpkg
+  # Try HarfBuzz from CONFIG (vcpkg)
+  find_package(harfbuzz CONFIG QUIET)
+
+  # Prefer imported target from vcpkg
   if(TARGET harfbuzz::harfbuzz)
     target_link_libraries(otc_textstack INTERFACE harfbuzz::harfbuzz)
   elseif(TARGET harfbuzz)
     target_link_libraries(otc_textstack INTERFACE harfbuzz)
+  else()
+    # Fallback: pkg-config + system includes/libs
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(HARFBUZZ REQUIRED harfbuzz)
+    target_include_directories(otc_textstack INTERFACE ${HARFBUZZ_INCLUDE_DIRS})
+    target_link_libraries(otc_textstack INTERFACE ${HARFBUZZ_LINK_LIBRARIES})
   endif()
+
   target_compile_definitions(otc_textstack INTERFACE OTC_ENABLE_HARFBUZZ)
 endif()
 
