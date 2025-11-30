@@ -30,6 +30,6 @@
     { "name": "luajit" },
     { "name": "pkgconf", "host": true, "platform": "windows" }
   ],
-  "builtin-baseline": "b322346fe03b0d04283f9daf05fecc0c8f64d6f"
+  "builtin-baseline": "5bf0c55239da398b8c6f450818c9e28d36bf9966"
   
 }
