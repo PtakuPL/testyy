@@ -178,22 +178,199 @@ add_definitions(-D"BUILD_REVISION=\\\"${BUILD_REVISION}\\\"")
 # *****************************************************************************
 # Packages / Libs
 # *****************************************************************************
-find_package(OpenSSL QUIET)
-find_package(PhysFS REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(phmap REQUIRED)
-find_package(absl CONFIG REQUIRED)
-find_package(Protobuf REQUIRED)
-find_package(LibLZMA REQUIRED)
-find_package(nlohmann_json REQUIRED)
-find_package(asio REQUIRED)
-find_package(Threads REQUIRED)
-find_package(STDUUID CONFIG REQUIRED)
-find_package(pugixml CONFIG REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(httplib CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
+include(FetchContent)
 
+  find_package(OpenSSL QUIET)
+  find_package(PhysFS CONFIG QUIET)
+  if(TARGET PhysFS::PhysFS)
+    get_target_property(PHYSFS_INCLUDE_DIR PhysFS::PhysFS INTERFACE_INCLUDE_DIRECTORIES)
+    set(PHYSFS_LIBRARY PhysFS::PhysFS)
+  else()
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+      pkg_check_modules(PHYSFS physfs)
+    endif()
+    if(PHYSFS_FOUND)
+      set(PHYSFS_LIBRARY ${PHYSFS_LINK_LIBRARIES})
+      set(PHYSFS_INCLUDE_DIR ${PHYSFS_INCLUDE_DIRS})
+      if(NOT TARGET PhysFS::PhysFS)
+        add_library(PhysFS::PhysFS INTERFACE IMPORTED)
+        target_include_directories(PhysFS::PhysFS INTERFACE ${PHYSFS_INCLUDE_DIRS})
+        target_link_libraries(PhysFS::PhysFS INTERFACE ${PHYSFS_LINK_LIBRARIES})
+      endif()
+    else()
+      message(FATAL_ERROR "Could not find PhysFS; install physfs or libphysfs-dev")
+    endif()
+  endif()
+  find_package(ZLIB REQUIRED)
+  find_package(absl CONFIG QUIET)
+  find_package(Protobuf REQUIRED)
+  find_package(LibLZMA REQUIRED)
+  find_package(nlohmann_json CONFIG QUIET)
+  if(TARGET nlohmann_json::nlohmann_json)
+    get_target_property(NLOHMANN_JSON_INCLUDE_DIR nlohmann_json::nlohmann_json INTERFACE_INCLUDE_DIRECTORIES)
+    set(NLOHMANN_JSON_LIBRARY nlohmann_json::nlohmann_json)
+  else()
+    find_path(NLOHMANN_JSON_INCLUDE_DIR NAMES nlohmann/json.hpp)
+    if(NOT NLOHMANN_JSON_INCLUDE_DIR)
+      message(FATAL_ERROR "Could not find nlohmann/json.hpp; install nlohmann-json3-dev or provide a CMake package")
+    endif()
+    add_library(nlohmann_json::nlohmann_json INTERFACE IMPORTED)
+    target_include_directories(nlohmann_json::nlohmann_json INTERFACE ${NLOHMANN_JSON_INCLUDE_DIR})
+    set(NLOHMANN_JSON_LIBRARY nlohmann_json::nlohmann_json)
+  endif()
+  find_package(asio CONFIG QUIET)
+  if(TARGET asio::asio)
+    get_target_property(ASIO_INCLUDE_DIR asio::asio INTERFACE_INCLUDE_DIRECTORIES)
+  else()
+    find_path(ASIO_INCLUDE_DIR NAMES asio.hpp)
+    if(NOT ASIO_INCLUDE_DIR)
+      FetchContent_Declare(asio
+        GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+        GIT_TAG asio-1-30-2
+      )
+      FetchContent_MakeAvailable(asio)
+      set(ASIO_INCLUDE_DIR ${asio_SOURCE_DIR}/asio/include)
+    endif()
+    if(NOT TARGET asio::asio)
+      add_library(asio::asio INTERFACE IMPORTED)
+      target_include_directories(asio::asio INTERFACE ${ASIO_INCLUDE_DIR})
+      target_compile_definitions(asio::asio INTERFACE ASIO_STANDALONE)
+    endif()
+  endif()
+  find_package(Threads REQUIRED)
+  find_package(pugixml CONFIG QUIET)
+  if(TARGET pugixml::pugixml)
+    get_target_property(PUGIXML_INCLUDE_DIR pugixml::pugixml INTERFACE_INCLUDE_DIRECTORIES)
+    set(PUGIXML_TARGET pugixml::pugixml)
+  else()
+    find_path(PUGIXML_INCLUDE_DIR NAMES pugixml.hpp)
+    find_library(PUGIXML_LIBRARY NAMES pugixml)
+    if(NOT PUGIXML_INCLUDE_DIR OR NOT PUGIXML_LIBRARY)
+      message(FATAL_ERROR "Could not find pugixml; install libpugixml-dev or provide a CMake package")
+    endif()
+    add_library(pugixml::pugixml INTERFACE IMPORTED)
+    target_include_directories(pugixml::pugixml INTERFACE ${PUGIXML_INCLUDE_DIR})
+    target_link_libraries(pugixml::pugixml INTERFACE ${PUGIXML_LIBRARY})
+    set(PUGIXML_TARGET pugixml::pugixml)
+  endif()
+  find_package(ZLIB REQUIRED)
+  find_package(fmt CONFIG QUIET)
+  if(TARGET fmt::fmt)
+    set(FMT_TARGET fmt::fmt)
+  elseif(TARGET fmt::fmt-header-only)
+    set(FMT_TARGET fmt::fmt-header-only)
+  else()
+    find_path(FMT_INCLUDE_DIR NAMES fmt/format.h)
+    if(NOT FMT_INCLUDE_DIR)
+      message(FATAL_ERROR "Could not find fmt headers; install libfmt-dev or provide a CMake package")
+    endif()
+    add_library(fmt::fmt-header-only INTERFACE IMPORTED)
+    target_include_directories(fmt::fmt-header-only INTERFACE ${FMT_INCLUDE_DIR})
+    add_library(fmt::fmt ALIAS fmt::fmt-header-only)
+    set(FMT_TARGET fmt::fmt-header-only)
+  endif()
+
+  set(ABSL_LOG_TARGET fmt::fmt)
+  if(TARGET absl::log_internal_check_op)
+    set(ABSL_LOG_TARGET absl::log_internal_check_op)
+  elseif(TARGET absl::raw_logging_internal)
+    set(ABSL_LOG_TARGET absl::raw_logging_internal)
+  elseif(TARGET absl::log_severity)
+    set(ABSL_LOG_TARGET absl::log_severity)
+  elseif(TARGET absl::base)
+    set(ABSL_LOG_TARGET absl::base)
+  endif()
+
+# Header-only BS_thread_pool (task scheduler)
+find_path(BS_THREAD_POOL_INCLUDE_DIR NAMES BS_thread_pool.hpp)
+if(NOT BS_THREAD_POOL_INCLUDE_DIR)
+  FetchContent_Declare(bs_thread_pool
+    GIT_REPOSITORY https://github.com/bshoshany/thread-pool.git
+    GIT_TAG v4.1.0
+  )
+  FetchContent_MakeAvailable(bs_thread_pool)
+  set(BS_THREAD_POOL_INCLUDE_DIR ${bs_thread_pool_SOURCE_DIR}/include)
+endif()
+
+# phmap (parallel-hashmap) may be available via a CMake config (e.g. vcpkg)
+# or only as system headers. Try the imported target first, then fall back to
+# discovering the include path manually.
+find_package(phmap CONFIG QUIET)
+  if(TARGET phmap::phmap)
+    get_target_property(PARALLEL_HASHMAP_INCLUDE_DIRS phmap::phmap INTERFACE_INCLUDE_DIRECTORIES)
+  elseif(NOT PARALLEL_HASHMAP_INCLUDE_DIRS)
+    find_path(PARALLEL_HASHMAP_INCLUDE_DIRS NAMES parallel_hashmap/phmap.h)
+    if(NOT PARALLEL_HASHMAP_INCLUDE_DIRS)
+      FetchContent_Declare(parallel_hashmap
+        GIT_REPOSITORY https://github.com/greg7mdp/parallel-hashmap.git
+        GIT_TAG v1.3.11
+      )
+      FetchContent_MakeAvailable(parallel_hashmap)
+      set(PARALLEL_HASHMAP_INCLUDE_DIRS ${parallel_hashmap_SOURCE_DIR})
+    endif()
+    if(NOT TARGET phmap::phmap)
+      add_library(phmap::phmap INTERFACE IMPORTED)
+      target_include_directories(phmap::phmap INTERFACE ${PARALLEL_HASHMAP_INCLUDE_DIRS})
+    endif()
+  endif()
+
+# stduuid is header-only; prefer a config package but allow system headers.
+find_package(STDUUID CONFIG QUIET)
+if(TARGET stduuid::stduuid)
+  set(STDUUID stduuid::stduuid)
+  get_target_property(STDUUID_INCLUDE_DIRS stduuid::stduuid INTERFACE_INCLUDE_DIRECTORIES)
+elseif(TARGET stduuid)
+  set(STDUUID stduuid)
+  get_target_property(STDUUID_INCLUDE_DIRS stduuid INTERFACE_INCLUDE_DIRECTORIES)
+endif()
+if(NOT STDUUID)
+  find_path(STDUUID_INCLUDE_DIRS NAMES stduuid/uuid.h)
+
+  if(NOT STDUUID_INCLUDE_DIRS)
+    # Fetch a header-only copy when no package is available.
+    FetchContent_Declare(stduuid_fetch
+      GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
+      GIT_TAG v1.2.3
+    )
+    FetchContent_MakeAvailable(stduuid_fetch)
+    set(STDUUID_INCLUDE_DIRS ${stduuid_fetch_SOURCE_DIR}/include)
+  endif()
+
+  add_library(stduuid::stduuid INTERFACE IMPORTED)
+  target_include_directories(stduuid::stduuid INTERFACE ${STDUUID_INCLUDE_DIRS})
+  set(STDUUID stduuid::stduuid)
+endif()
+
+# cpp-httplib (HTTP server/client) with pkg-config fallback
+  find_package(httplib CONFIG QUIET)
+  if(TARGET httplib::httplib)
+    set(HTTPLIB_LIBRARY httplib::httplib)
+  else()
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+      pkg_check_modules(HTTPLIB cpp-httplib)
+    endif()
+    if(HTTPLIB_FOUND)
+      if(NOT TARGET httplib::httplib)
+        add_library(httplib::httplib INTERFACE IMPORTED)
+        target_include_directories(httplib::httplib INTERFACE ${HTTPLIB_INCLUDE_DIRS})
+        target_compile_definitions(httplib::httplib INTERFACE ${HTTPLIB_CFLAGS_OTHER})
+      endif()
+      set(HTTPLIB_LIBRARY httplib::httplib)
+    else()
+      FetchContent_Declare(cpp_httplib
+        GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+        GIT_TAG v0.15.3
+      )
+      FetchContent_MakeAvailable(cpp_httplib)
+      if(NOT TARGET httplib::httplib)
+        add_library(httplib::httplib INTERFACE IMPORTED)
+        target_include_directories(httplib::httplib INTERFACE ${cpp_httplib_SOURCE_DIR})
+      endif()
+      set(HTTPLIB_LIBRARY httplib::httplib)
+    endif()
+  endif()
 if(APPLE)
   # Required for Physfs
   find_library(FOUNDATION Foundation REQUIRED)
@@ -213,11 +390,41 @@ if(TOGGLE_DIRECTX)
 endif()
 if(TOGGLE_FRAMEWORK_SOUND)
   if(NOT WASM)
-    find_package(OpenAL CONFIG REQUIRED)
+        find_package(OpenAL CONFIG QUIET)
+    if(NOT TARGET OpenAL::OpenAL)
+      find_package(OpenAL REQUIRED)
+    endif()
   endif()
   find_package(VorbisFile REQUIRED)
-  find_package(Vorbis CONFIG REQUIRED)
-  find_package(Ogg CONFIG REQUIRED)
+  find_package(Vorbis CONFIG QUIET)
+  if(NOT TARGET Vorbis::vorbis)
+    find_package(Vorbis REQUIRED)
+  endif()
+  find_package(Ogg CONFIG QUIET)
+  if(NOT TARGET Ogg::ogg)
+    find_package(Ogg REQUIRED)
+  endif()
+
+  if(OGG_FOUND AND NOT TARGET Ogg::ogg)
+    add_library(Ogg::ogg UNKNOWN IMPORTED)
+    set_target_properties(Ogg::ogg PROPERTIES
+      IMPORTED_LOCATION ${OGG_LIBRARY}
+      INTERFACE_INCLUDE_DIRECTORIES ${OGG_INCLUDE_DIR})
+  endif()
+
+  if(Vorbis_FOUND AND NOT TARGET Vorbis::vorbis)
+    add_library(Vorbis::vorbis UNKNOWN IMPORTED)
+    set_target_properties(Vorbis::vorbis PROPERTIES
+      IMPORTED_LOCATION ${VORBIS_LIBRARY}
+      INTERFACE_INCLUDE_DIRECTORIES ${VORBIS_INCLUDE_DIR})
+  endif()
+
+  if(VorbisFile_FOUND AND NOT TARGET Vorbis::vorbisfile)
+    add_library(Vorbis::vorbisfile UNKNOWN IMPORTED)
+    set_target_properties(Vorbis::vorbisfile PROPERTIES
+      IMPORTED_LOCATION ${VORBISFILE_LIBRARY}
+      INTERFACE_INCLUDE_DIRECTORIES ${VORBISFILE_INCLUDE_DIR})
+  endif()
 endif()
 if(ANDROID)
   set(LUA_LIBRARY ${LUA_LIBRARY} ${Android_LIBRARIES}/liblua.a)
@@ -364,11 +571,13 @@ if (TOGGLE_FRAMEWORK_GRAPHICS)
           framework/core/garbagecollection.cpp
           framework/input/mouse.cpp
           framework/graphics/animatedtexture.cpp
-          framework/graphics/apngloader.cpp
-          framework/graphics/bitmapfont.cpp
-          framework/graphics/cachedtext.cpp
-          framework/graphics/coordsbuffer.cpp
-          framework/graphics/textureatlas.cpp
+            framework/graphics/apngloader.cpp
+            framework/graphics/bitmapfont.cpp
+            framework/graphics/cachedtext.cpp
+            framework/graphics/coordsbuffer.cpp
+            framework/text/TTFFont.cpp
+            framework/text/TextShaper.cpp
+            framework/graphics/textureatlas.cpp
           framework/graphics/drawpool.cpp
           framework/graphics/drawpoolmanager.cpp
           framework/graphics/fontmanager.cpp
@@ -486,6 +695,8 @@ if(MSVC)
           ${PHYSFS_INCLUDE_DIR}
           ${PARALLEL_HASHMAP_INCLUDE_DIRS}
           ${NLOHMANN_JSON_INCLUDE_DIR}
+          ${BS_THREAD_POOL_INCLUDE_DIR}
+          ${STDUUID_INCLUDE_DIRS}
   )
   target_link_libraries(${PROJECT_NAME}
           PRIVATE
@@ -506,7 +717,7 @@ if(MSVC)
           ${STDUUID}
 
           protobuf::libprotobuf protobuf
-          absl::log_internal_check_op
+          ${ABSL_LOG_TARGET}
           Threads::Threads
           GLEW::GLEW
           asio::asio
@@ -578,6 +789,8 @@ elseif(WASM)
           ${NLOHMANN_JSON_INCLUDE_DIR}
           ${OPENSSL_INCLUDE_DIR}
           ${BROWSER_INCLUDE_DIR}
+          ${BS_THREAD_POOL_INCLUDE_DIR}
+          ${STDUUID_INCLUDE_DIRS}
   )
   target_link_libraries(${PROJECT_NAME}
           PRIVATE
@@ -602,7 +815,7 @@ elseif(WASM)
           ${HTTPLIB_LIBRARY}
 
           protobuf::libprotobuf protobuf
-          absl::log_internal_check_op
+          ${ABSL_LOG_TARGET}
 
           Threads::Threads
           asio::asio
@@ -662,6 +875,8 @@ else() # Linux
           ${PARALLEL_HASHMAP_INCLUDE_DIRS}
           ${NLOHMANN_JSON_INCLUDE_DIR}
           ${OPENSSL_INCLUDE_DIR}
+          ${BS_THREAD_POOL_INCLUDE_DIR}
+          ${STDUUID_INCLUDE_DIRS}
   )
   target_link_libraries(${PROJECT_NAME}
           PRIVATE
@@ -685,7 +900,7 @@ else() # Linux
           ${HTTPLIB_LIBRARY}
 
           protobuf::libprotobuf protobuf
-          absl::log_internal_check_op
+          ${ABSL_LOG_TARGET}
           Threads::Threads
           X11::X11
           asio::asio

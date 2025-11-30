@@ -213,7 +213,6 @@ httplib::Result LoginHttp::loginHttpsJson(const std::string& host,
 
     client.set_ca_cert_path("./cacert.pem");
     client.enable_server_certificate_verification(false);
-    client.enable_server_hostname_verification(false);
 
     const json body = { {"email", email}, {"password", password}, {"stayloggedin", true}, {"type", "login"} };
     const httplib::Headers headers = { {"User-Agent", "Mozilla/5.0"} };

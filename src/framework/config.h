@@ -21,7 +21,7 @@
  */
 
 #pragma once
-#include <obfuscate.h>
+#include "framework/obfuscate.h"
 
  // APPEARANCES
 #define BYTES_IN_SPRITE_SHEET 384 * 384 * 4

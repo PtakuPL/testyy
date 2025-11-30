@@ -24,6 +24,9 @@
 
 #include "thing.h"
 #include <framework/graphics/cachedtext.h>
+#include <deque>
+#include <string>
+#include <string_view>
 
  // @bindclass
 class StaticText final : public LuaObject

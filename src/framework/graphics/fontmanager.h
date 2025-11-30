@@ -24,6 +24,9 @@
 
 #include "bitmapfont.h"
 
+#include <string_view>
+#include <vector>
+
  //@bindsingleton g_fonts
 class FontManager
 {

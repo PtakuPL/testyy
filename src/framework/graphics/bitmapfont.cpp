@@ -30,6 +30,10 @@
 
 #include "drawpoolmanager.h"
 #include <framework/text/TextShaper.h>
+#include <framework/core/logger.h>
+
+#include <fmt/format.h>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -84,7 +88,7 @@ if(type == "ttf") {
 
     m_ttf = std::make_shared<TTFFont>();
     if(!m_ttf->load(mainPath, fbPaths, size)) {
-        g_logger.error(stdext::format("TTF load failed: %s", src));
+        g_logger.error(fmt::format("TTF load failed: {}", src));
         return;
     }
 
