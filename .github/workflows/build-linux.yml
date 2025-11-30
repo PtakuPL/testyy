@@ -33,39 +33,18 @@ jobs:
         with:
           arch: x64
 
-      # Określenie używanego commitu vcpkg na podstawie builtin-baseline
-      - name: Resolve vcpkg commit (from builtin-baseline or fallback)
-        id: vcpkg-commit
-        shell: pwsh
-        run: |
-          $fallback = '5b1214315250939257ef5d62ecdcbca18cf4fb1c'
-          $commit = ''
-          if (Test-Path "$env:GITHUB_WORKSPACE\vcpkg.json") {
-            try {
-              $json = Get-Content "$env:GITHUB_WORKSPACE\vcpkg.json" -Raw | ConvertFrom-Json
-              $commit = $json.'builtin-baseline'
-            } catch { $commit = '' }
-          }
-          if ($commit -match '^[0-9a-f]{40}$') {
-            "vcpkgGitCommitId=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-            Write-Host "Using builtin-baseline as vcpkgGitCommitId: $commit"
-          } else {
-            "vcpkgGitCommitId=$fallback" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-            Write-Host "No valid builtin-baseline found; using fallback: $fallback"
-          }
-
+      # instalujemy vcpkg na stabilnym commicie – nie wyciągamy go z vcpkg.json
       - name: Setup vcpkg (manifest install + GH cache)
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitURL: https://github.com/microsoft/vcpkg.git
-          vcpkgGitCommitId: ${{ steps.vcpkg-commit.outputs.vcpkgGitCommitId }}
+          vcpkgGitCommitId: 5b1214315250939257ef5d62ecdcbca18cf4fb1c
           runVcpkgInstall: true
-          # używamy wyłącznie głównego manifestu z repozytorium
           vcpkgJsonGlob: vcpkg.json
           vcpkgConfigurationJsonGlob: vcpkg-configuration.json
           doNotCache: false
 
-      # instalacja pkgconf, potrzebnego dla pkg-config
+      # fallback dla pkgconf – potrzebny do find_package via pkg-config
       - name: Ensure pkgconf (host/target)
         shell: pwsh
         run: |
