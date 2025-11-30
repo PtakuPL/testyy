@@ -16,6 +16,9 @@ env:
 jobs:
   build:
     runs-on: windows-2022
+    defaults:
+      run:
+        shell: cmd
     strategy:
       matrix:
         buildtype: [Debug]
@@ -56,7 +59,13 @@ jobs:
     - name: Install vcpkg
       uses: lukka/run-vcpkg@v11
       with:
+        vcpkgGitURL: https://github.com/microsoft/vcpkg.git
         vcpkgGitCommitId: ${{ steps.vcpkg-step.outputs.vcpkgGitCommitId }}
+        vcpkgJsonGlob: vcpkg.json
+        vcpkgConfigurationJsonGlob: vcpkg-configuration.json
+        vcpkgJsonIgnores: "['**/vcpkg/**','**/browser/overlay-ports/**']"
+        runVcpkgInstall: true
+        doNotCache: false
 
     - name: Configure and Build
       uses: lukka/run-cmake@main

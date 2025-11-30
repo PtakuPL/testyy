@@ -1452,7 +1452,7 @@ std::vector<CreaturePtr> Map::getSpectatorsByPattern(const Position& centerPos, 
         height += 1;
     }
     if (width % 2 != 1 || height % 2 != 1) {
-        g_logger.error("Invalid pattern for getSpectatorsByPattern, width and height should be odd (height: %i width: %i)", height, width);
+        g_logger.error("Invalid pattern for getSpectatorsByPattern, width and height should be odd (height: {} width: {})", height, width);
         return creatures;
     }
 

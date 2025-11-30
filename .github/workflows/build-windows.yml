@@ -15,6 +15,9 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
 
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
@@ -38,34 +41,34 @@ jobs:
       - name: Install CMake + Ninja
         uses: lukka/get-cmake@latest
 
-      # run-vcpkg: brak vcpkgDirectory, pin na pełny SHA, jeden manifest w root
+      # run-vcpkg: pin na pełny SHA, jeden manifest w root
+      # defaults shell: cmd - fix for pkgconf portfile bug with PowerShell $Host variable
       - name: Setup vcpkg (pin + manifest)
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitURL: https://github.com/microsoft/vcpkg.git
-          vcpkgGitCommitId: b322346fe03b0d04283f9daf05fecc0c8f64d6f
+          vcpkgGitCommitId: 5bf0c55239da398b8c6f450818c9e28d36bf9966
           runVcpkgInstall: true
           vcpkgJsonGlob: 'vcpkg.json'
           vcpkgConfigurationJsonGlob: 'vcpkg-configuration.json'
           vcpkgJsonIgnores: "['**/vcpkg/**','**/browser/overlay-ports/**']"
           doNotUpdateVcpkg: false
           doNotCache: false
-          useShell: true
           runVcpkgFormatString: "[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`]"
           logCollectionRegExps: "\s*\"(.+CMakeOutput\.log)\"\.\s*;\s*\"(.+CMakeError\.log)\"\.\s*;\s*(.+out\.log)\s*;\s+(.+err\.log)\s*;\s*(.+vcpkg.+\.log)\s*"
 
       - name: Configure (CMake + vcpkg toolchain, VS generator)
-        shell: pwsh
-        run: >
-          cmake -S . -B build
-          -G "Visual Studio 17 2022" -A x64
-          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
-          -DVCPKG_TARGET_TRIPLET="$env:VCPKG_DEFAULT_TRIPLET"
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_VERBOSE_MAKEFILE=ON
+        shell: cmd
+        run: |
+          cmake -S . -B build ^
+            -G "Visual Studio 17 2022" -A x64 ^
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
+            -DVCPKG_TARGET_TRIPLET="%VCPKG_DEFAULT_TRIPLET%" ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_VERBOSE_MAKEFILE=ON
 
       - name: Build (Release)
-        shell: pwsh
+        shell: cmd
         run: cmake --build build --config Release --parallel
 
       - name: Upload artifacts
