@@ -46,12 +46,12 @@
 
 | Plik | Problem | Status |
 |------|---------|--------|
-| `src/framework/core/asyncdispatcher.h` | `BS::thread_pool` → `BS::thread_pool<>` | ✅ Naprawione |
-| `src/framework/core/asyncdispatcher.cpp` | `BS::thread_pool` → `BS::thread_pool<>` | ✅ Naprawione |
+| `src/framework/core/asyncdispatcher.h` | `BS::thread_pool` → `BS::thread_pool<0>` | ✅ Naprawione |
+| `src/framework/core/asyncdispatcher.cpp` | `BS::thread_pool` → `BS::thread_pool<0>` | ✅ Naprawione |
 | `src/framework/core/eventdispatcher.h` | Podwójny średnik `;;` | ✅ Naprawione |
 | `src/framework/platform/platformwindow.h` | Unused parameter warning | ✅ Naprawione |
 
-**Opis problemu:** Niezgodność typu szablonu między deklaracją extern i definicją powodowała błąd linkera.
+**Opis problemu:** Vcpkg wersja `bshoshany-thread-pool` używa `BS::thread_pool<0>` jako domyślny typ szablonu. Niezgodność typu szablonu między deklaracją extern i definicją powodowała błąd linkera.
 
 **Priorytet:** 🟢 ROZWIĄZANE
 
