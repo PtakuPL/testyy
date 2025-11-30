@@ -27,6 +27,7 @@ jobs:
             libphysfs-dev nlohmann-json3-dev libpugixml-dev libfmt-dev \
             libopenal-dev libvorbis-dev libglew-dev libluajit-5.1-dev
 
+      # Cache kompilatora ccache
       - name: Cache CCache
         uses: actions/cache@v4
         with:
@@ -35,6 +36,7 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-
 
+      # Cache danych analizy SonarCloud
       - name: Cache SonarCloud analysis data
         uses: actions/cache@v4
         with:
@@ -43,6 +45,7 @@ jobs:
           restore-keys: |
             sonar-cfamily-${{ runner.os }}-
 
+      # Cache paczek SonarCloud
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
         with:
@@ -51,28 +54,16 @@ jobs:
           restore-keys: |
             sonar-packages-${{ runner.os }}-
 
-      - name: Extract vcpkg commit ID
-        id: vcpkg-step
-        run: |
-          vcpkgCommitId=$(grep '"builtin-baseline"' vcpkg.json | awk -F: '{print $2}' | tr -d '," ')
-          echo "vcpkgGitCommitId=$vcpkgCommitId" >> "$GITHUB_OUTPUT"
-
-      - name: Cache vcpkg installed packages
-        uses: actions/cache@v4
-        with:
-          path: build/vcpkg_installed
-          key: vcpkg-installed-${{ runner.os }}-${{ steps.vcpkg-step.outputs.vcpkgGitCommitId }}
-          restore-keys: |
-            vcpkg-installed-${{ runner.os }}-
-
-      - name: Setup vcpkg with baseline
+      # Setup vcpkg na stabilnym commicie
+      - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: ${{ steps.vcpkg-step.outputs.vcpkgGitCommitId }}
-          # Jednoznaczne wskazanie pliku manifestu
+          vcpkgGitCommitId: 5b1214315250939257ef5d62ecdcbca18cf4fb1c
           vcpkgJsonGlob: vcpkg.json
           vcpkgConfigurationJsonGlob: vcpkg-configuration.json
+          runVcpkgInstall: true
 
+      # Kompilacja i wygenerowanie compile_commands.json
       - name: Build & Generate compilation database
         run: |
           cmake -S . -B build \
@@ -84,7 +75,6 @@ jobs:
             -DOPTIONS_ENABLE_CCACHE=ON \
             -DSPEED_UP_BUILD_UNITY=OFF
           cmake --build build --parallel
-          # przenosimy compile_commands.json do katalogu głównego dla SonarCloud
           cp build/compile_commands.json .
 
       - name: SonarCloud Scan
