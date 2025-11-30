@@ -38,7 +38,26 @@
 
 ---
 
-### 1.2 Problemy z MSVC/Unity Build
+### 1.2 Błędy Szablonów C++ (BS::thread_pool)
+
+**Status:** ✅ NAPRAWIONE
+
+**Pliki naprawione:**
+
+| Plik | Problem | Status |
+|------|---------|--------|
+| `src/framework/core/asyncdispatcher.h` | `BS::thread_pool` → `BS::thread_pool<>` | ✅ Naprawione |
+| `src/framework/core/asyncdispatcher.cpp` | `BS::thread_pool` → `BS::thread_pool<>` | ✅ Naprawione |
+| `src/framework/core/eventdispatcher.h` | Podwójny średnik `;;` | ✅ Naprawione |
+| `src/framework/platform/platformwindow.h` | Unused parameter warning | ✅ Naprawione |
+
+**Opis problemu:** Niezgodność typu szablonu między deklaracją extern i definicją powodowała błąd linkera.
+
+**Priorytet:** 🟢 ROZWIĄZANE
+
+---
+
+### 1.3 Problemy z MSVC/Unity Build
 
 **Znane problemy:**
 - [ ] ICE (Internal Compiler Error) w `otmlnode.cpp` podczas LTCG
@@ -52,7 +71,7 @@
 
 ---
 
-### 1.3 Niespójności Nagłówków
+### 1.4 Niespójności Nagłówków
 
 - [ ] Sprawdzić wszystkie `#include` w kontekście Windows vs Linux
 - [ ] Upewnić się, że X11 headers są opakowane w `#if !defined(_WIN32)`

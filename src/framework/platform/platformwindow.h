@@ -81,7 +81,7 @@ public:
     // is only supported on Windows 10/11 via the DWM API. On other platforms,
     // or when not implemented in the derived class, this method does nothing.
     // Derived classes should override this method to provide platform-specific behavior.
-    virtual void setTitleBarColor(const Color& color) {}
+    virtual void setTitleBarColor([[maybe_unused]] const Color& color) {}
 
     // Convenience methods for setting title bar color
     // Usage examples:
