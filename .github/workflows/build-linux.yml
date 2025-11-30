@@ -33,12 +33,12 @@ jobs:
         with:
           arch: x64
 
-      # Wyciągamy 40-znakowy SHA z builtin-baseline (jeśli brak/niepełny -> bezpieczny fallback)
+      # Określenie używanego commitu vcpkg na podstawie builtin-baseline
       - name: Resolve vcpkg commit (from builtin-baseline or fallback)
         id: vcpkg-commit
         shell: pwsh
         run: |
-          $fallback = '5b1214315250939257ef5d62ecdcbca18cf4fb1c' # zalecany, zgodny z run-vcpkg@v11
+          $fallback = '5b1214315250939257ef5d62ecdcbca18cf4fb1c'
           $commit = ''
           if (Test-Path "$env:GITHUB_WORKSPACE\vcpkg.json") {
             try {
@@ -59,13 +59,13 @@ jobs:
         with:
           vcpkgGitURL: https://github.com/microsoft/vcpkg.git
           vcpkgGitCommitId: ${{ steps.vcpkg-commit.outputs.vcpkgGitCommitId }}
-          # NIE ustawiamy vcpkgDirectory — nie wymagamy submodułu, unikamy 'pathspec .../vcpkg'
           runVcpkgInstall: true
-          vcpkgJsonGlob: "**/vcpkg.json"
-          vcpkgConfigurationJsonGlob: "**/vcpkg-configuration.json"
+          # używamy wyłącznie głównego manifestu z repozytorium
+          vcpkgJsonGlob: vcpkg.json
+          vcpkgConfigurationJsonGlob: vcpkg-configuration.json
           doNotCache: false
 
-      # Fallback dla pkgconf (często potrzebny przez find_package via pkg-config)
+      # instalacja pkgconf, potrzebnego dla pkg-config
       - name: Ensure pkgconf (host/target)
         shell: pwsh
         run: |
