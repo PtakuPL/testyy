@@ -272,7 +272,7 @@ void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
         const uint32_t totalSize = m_zstream.total_out;
         inflateReset(&m_zstream);
         if (totalSize == 0) {
-            g_logger.traceError("invalid size of decompressed message - %i", totalSize);
+            g_logger.traceError("invalid size of decompressed message - {}", totalSize);
             return;
         }
 

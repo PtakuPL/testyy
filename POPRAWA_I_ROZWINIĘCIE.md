@@ -25,14 +25,16 @@
 
 ### 1.1 Błędne Formatowanie Logów (printf-style zamiast fmt-style)
 
-**Pliki do naprawy:**
+**Status:** ✅ NAPRAWIONE
 
-| Plik | Linia | Problem | Naprawa |
-|------|-------|---------|---------|
-| `src/framework/net/protocol.cpp` | ~275 | `g_logger.traceError("invalid size of decompressed message - %i", totalSize);` | Zmienić `%i` na `{}` |
-| `src/client/map.cpp` | ~1455 | `g_logger.error("Invalid pattern... height: %i width: %i", height, width);` | Zmienić `%i` na `{}` |
+**Pliki naprawione:**
 
-**Priorytet:** 🔴 KRYTYCZNY - Blokuje kompilację z fmt/spdlog
+| Plik | Linia | Problem | Status |
+|------|-------|---------|--------|
+| `src/framework/net/protocol.cpp` | ~275 | `%i` → `{}` | ✅ Naprawione |
+| `src/client/map.cpp` | ~1455 | `%i` → `{}` | ✅ Naprawione |
+
+**Priorytet:** 🟢 ROZWIĄZANE
 
 ---
 
@@ -112,22 +114,24 @@
 
 **Plik:** `src/framework/ui/uitextedit.cpp`
 
-**Problemy:**
+**Status:** 🟡 CZĘŚCIOWO NAPRAWIONE
+
+**Naprawione:**
+- [x] Blokada TTF przez sprawdzanie `m_font->getTexture()` - dodano ścieżkę dla TTF
+
+**Pozostałe problemy:**
 - [ ] Iteracja po bajtach zamiast kodopunktów UTF-8
 - [ ] Pozycja kursora błędnie obliczana dla znaków wielobajtowych
-- [ ] Zaznaczanie tekstu nie działa poprawnie z RTL
-- [ ] Blokada TTF przez sprawdzanie `m_font->getTexture()`
-
-**Do naprawy (linie ~69-71):**
-```cpp
-const auto& texture = m_font->getTexture();
-if (!texture)  // Blokuje TTF!
-    return;
-```
+- [ ] Zaznaczanie tekstu nie działa poprawnie z RTL (TODO w kodzie)
 
 ### 3.2 UIWidgetText
 
-- [ ] Dostosować do obsługi TTFFont
+**Status:** 🟡 CZĘŚCIOWO NAPRAWIONE
+
+**Naprawione:**
+- [x] Dodano ścieżkę renderowania dla TTFFont
+
+**Pozostałe problemy:**
 - [ ] Używać `font->calculateTextRectSize()` zamiast własnych kalkulacji
 - [ ] Obsługa klastrów przy zawijaniu tekstu
 

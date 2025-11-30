@@ -66,6 +66,24 @@ void UITextEdit::drawSelf(const DrawPoolType drawPane)
     drawImage(m_rect);
     drawIcon(m_rect);
 
+    // For TTF fonts, use direct drawText path instead of texture-based rendering
+    if (m_font->isTTF()) {
+        const int textLength = m_text.length();
+        g_drawPool.setDrawOrder(m_textDrawOrder);
+        if (textLength == 0) {
+            if (m_placeholderFont && m_placeholderColor != Color::alpha && !m_placeholder.empty()) {
+                m_placeholderFont->drawText(m_placeholder, m_drawArea, m_placeholderColor, m_placeholderAlign);
+            }
+        } else if (m_color != Color::alpha) {
+            m_font->drawText(m_drawText, m_drawArea, m_color, m_textAlign);
+        }
+        g_drawPool.resetDrawOrder();
+        // TODO: TTF selection rendering
+        // TODO: TTF cursor rendering
+        return;
+    }
+
+    // Standard bitmap font path
     const auto& texture = m_font->getTexture();
     if (!texture)
         return;

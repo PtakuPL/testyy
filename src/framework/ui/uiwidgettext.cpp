@@ -105,6 +105,22 @@ void UIWidget::drawText(const Rect& screenCoords)
     if (m_drawText.empty() || m_color.aF() == 0.f || !m_font)
         return;
 
+    // TTF font path - use direct drawText
+    if (m_font->isTTF()) {
+        auto textOffset = m_textOffset;
+        textOffset.scale(m_fontScale);
+        
+        auto coords = Rect(screenCoords.topLeft(), screenCoords.bottomRight());
+        coords.translate(textOffset);
+        
+        g_drawPool.scale(m_fontScale);
+        g_drawPool.setDrawOrder(m_textDrawOrder);
+        m_font->drawText(m_drawText, coords, m_color, m_textAlign);
+        g_drawPool.resetDrawOrder();
+        g_drawPool.scale(1.f);
+        return;
+    }
+
     // Hack to fix font rendering in atlas
     if (m_font->getAtlasRegion() != m_atlasRegion) {
         m_atlasRegion = m_font->getAtlasRegion();
