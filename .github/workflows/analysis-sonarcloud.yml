@@ -7,7 +7,13 @@ on:
   pull_request:
 
 env:
+  VCPKG_FEATURE_FLAGS: manifests,binarycaching
+  VCPKG_BINARY_SOURCES: clear;x-gha,readwrite
+  VCPKG_DEFAULT_TRIPLET: x64-linux
+  VCPKG_DEFAULT_HOST_TRIPLET: x64-linux
   CMAKE_BUILD_PARALLEL_LEVEL: 2
+  CC: gcc-12
+  CXX: g++-12
 
 jobs:
   sonarcloud:
@@ -22,10 +28,13 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build ccache \
+          sudo apt-get install -y \
+            build-essential ninja-build ccache pkg-config cmake gcc-12 g++-12 \
+            libglew-dev libx11-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+            libgl1-mesa-dev libglu1-mesa-dev \
             libharfbuzz-dev libfribidi-dev libprotobuf-dev protobuf-compiler \
             libphysfs-dev nlohmann-json3-dev libpugixml-dev libfmt-dev \
-            libopenal-dev libvorbis-dev libglew-dev libluajit-5.1-dev
+            libopenal-dev libvorbis-dev libluajit-5.1-dev
 
       # Cache kompilatora ccache
       - name: Cache CCache
@@ -55,27 +64,30 @@ jobs:
             sonar-packages-${{ runner.os }}-
 
       # Setup vcpkg na stabilnym commicie
+      - name: Get vcpkg commit ID
+        id: vcpkg-step
+        run: |
+          vcpkgCommitId=$(grep '.builtin-baseline' vcpkg.json | awk -F: '{print $2}' | tr -d '," ')
+          echo "vcpkgGitCommitId=$vcpkgCommitId" >> $GITHUB_OUTPUT
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: 5b1214315250939257ef5d62ecdcbca18cf4fb1c
+          vcpkgGitCommitId: ${{ steps.vcpkg-step.outputs.vcpkgGitCommitId }}
           vcpkgJsonGlob: vcpkg.json
-          vcpkgConfigurationJsonGlob: vcpkg-configuration.json
           runVcpkgInstall: true
 
       # Kompilacja i wygenerowanie compile_commands.json
       - name: Build & Generate compilation database
         run: |
-          cmake -S . -B build \
-            -GNinja \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          cmake --preset linux-debug \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-            -DCMAKE_BUILD_TYPE=Debug \
+            -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_DEFAULT_TRIPLET }} \
+            -DCMAKE_C_COMPILER=${{ env.CC }} -DCMAKE_CXX_COMPILER=${{ env.CXX }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DOTC_ENABLE_TTF=ON -DOTC_ENABLE_HARFBUZZ=ON -DOTC_ENABLE_FRIBIDI=ON \
-            -DOPTIONS_ENABLE_CCACHE=ON \
             -DSPEED_UP_BUILD_UNITY=OFF
-          cmake --build build --parallel
-          cp build/compile_commands.json .
+          cmake --build --preset linux-debug
+          cp build/linux-debug/compile_commands.json .
 
       - name: SonarCloud Scan
         uses: sonarsource/sonarcloud-github-action@v2
