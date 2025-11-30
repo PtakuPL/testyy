@@ -188,10 +188,15 @@
 
 ### 5.4 GitHub Actions
 
-**Pliki workflow:**
-- [ ] `build-windows.yml` - częste timeouty
-- [ ] `build-ubuntu.yml` - brakujące zależności
-- [ ] `analysis-sonarcloud.yml` - problemy z vcpkg baseline
+**Status:** 🟢 NAPRAWIONE
+
+**Naprawione pliki workflow:**
+- [x] `build-windows.yml` - naprawiono niepoprawny 39-znakowy vcpkg commit hash (teraz 40 znaków)
+- [x] `build-ubuntu.yml` - dodano pełną konfigurację lukka/run-vcpkg
+- [x] `build-linux.yml` - ujednolicono vcpkg commit hash z vcpkg.json
+- [x] `build-browser.yml` - dodano pełną konfigurację lukka/run-vcpkg
+- [x] `build-windows-solution.yml` - dodano pełną konfigurację lukka/run-vcpkg
+- [x] `analysis-sonarcloud.yml` - dodano pełną konfigurację lukka/run-vcpkg
 
 ---
 

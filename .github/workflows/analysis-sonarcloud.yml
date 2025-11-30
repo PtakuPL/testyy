@@ -72,9 +72,13 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
+          vcpkgGitURL: https://github.com/microsoft/vcpkg.git
           vcpkgGitCommitId: ${{ steps.vcpkg-step.outputs.vcpkgGitCommitId }}
           vcpkgJsonGlob: vcpkg.json
+          vcpkgConfigurationJsonGlob: vcpkg-configuration.json
+          vcpkgJsonIgnores: "['**/vcpkg/**','**/browser/overlay-ports/**']"
           runVcpkgInstall: true
+          doNotCache: false
 
       # Kompilacja i wygenerowanie compile_commands.json
       - name: Build & Generate compilation database
